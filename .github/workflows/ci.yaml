@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2021-2022 Blender Foundation
+
+# Note CI is disabled by default in forked repositories. To enable, go to
+# repository Settings > Secrets and add secret CI_ENABLE with value 1.
+#
+# These actions require downloading large precompiled libraries, which will
+# take up significant cache space.
+
+name: CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Setup:
+    runs-on: ubuntu-latest
+    outputs:
+      CI_ENABLE: ${{ steps.check_secret.outputs.CI_ENABLE }}
+    steps:
+      - name: Check Secret
+        id: check_secret
+        env:
+          CI_ENABLE: ${{ secrets.CI_ENABLE }}
+        run: echo "CI_ENABLE=${{ env.CI_ENABLE != '' }}" >> $GITHUB_OUTPUT
+
+  Build:
+    needs: [Setup]
+    if: needs.Setup.outputs.CI_ENABLE == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            os: ubuntu-latest
+            make: CC=gcc-14 CXX=g++-14 make
+            build: ""
+            test: test
+          - platform: macOS
+            os: macos-latest
+            make: make
+            build: ""
+            test: test
+          - platform: Windows
+            os: windows-latest
+            make: cmd /c make.bat
+            build: ""
+            test: test
+          - platform: Windows-Debug
+            os: windows-latest
+            make: cmd /c make.bat
+            build: debug
+            test: test_debug
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: cycles
+
+      - name: Compute Libraries Key
+        id: libs_key
+        shell: bash
+        working-directory: cycles
+        run: echo "sha=$(git ls-tree HEAD lib | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Libraries
+        id: restore_libs
+        uses: actions/cache/restore@v4
+        with:
+          path: cycles/.git/modules/lib
+          key: libs-${{ matrix.os }}-${{ steps.libs_key.outputs.sha }}
+          restore-keys: |
+            libs-${{ matrix.os }}-
+
+      - name: Update
+        working-directory: cycles
+        run: ${{ matrix.make }} update
+
+      - name: Cache Libraries
+        if: steps.restore_libs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: cycles/.git/modules/lib
+          key: libs-${{ matrix.os }}-${{ steps.libs_key.outputs.sha }}
+
+      - name: Build
+        working-directory: cycles
+        run: ${{ matrix.make }} ${{ matrix.build }}
+
+      - name: Test
+        working-directory: cycles
+        run: ${{ matrix.make }} ${{ matrix.test }}
